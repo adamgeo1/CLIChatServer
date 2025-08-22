@@ -12,6 +12,8 @@
 #include <vector>
 #include <fstream>
 
+// Client Main
+
 constexpr int PORT = 8080;
 constexpr int BUFFER_SIZE = 1024;
 
@@ -80,9 +82,11 @@ json msg_to_json(const int req_id, const string& msg) {
             {"limit", split_msg[2]}
         };
     }
+    /*
     string dump = j.dump(2);
     ofstream out(format("{}json.txt", req_id));
     out << dump;
+    */
     return j;
 }
 
@@ -118,8 +122,13 @@ int main() {
         cout << "Enter message: ";
         getline(cin, msg);
         json req = msg_to_json(req_id, msg);
+        string payload = req.dump();
+        uint32_t len = htonl(payload.size());
+        string frame;
+        frame.append(reinterpret_cast<char*>(&len), sizeof(len));
+        frame.append(payload);
         req_id++;
-        send(sock, msg.c_str(), msg.size(), 0);
+        send(sock, frame.data(), frame.size(), 0);
         if (msg == "exit") {
             break;
         }

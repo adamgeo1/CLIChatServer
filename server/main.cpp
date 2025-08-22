@@ -7,6 +7,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 
+// Server Main
+
 constexpr int PORT = 8080;
 constexpr int BUFFER_SIZE = 1024;
 
@@ -59,14 +61,32 @@ int main() {
 
     // read and echo message
 
+    std::byte len_buf[4];
     for (;;) {
-        ssize_t val_read = read(new_socket, buffer, BUFFER_SIZE);
-        if (val_read <= 0) {
-            if (val_read < 0) {
-                perror("read");
+        constexpr int prefix_bytes = 4;
+        int bytes_read = 0;
+        ssize_t val_read = 0;
+        while (bytes_read < prefix_bytes) {
+            std::cout << "only " << bytes_read << " read" << std::endl;
+            val_read = read(new_socket, len_buf + bytes_read, prefix_bytes - bytes_read);
+            if (val_read <= 0) {
+                if (val_read < 0) {
+                    perror("read");
+                }
+                break;
             }
+            bytes_read += val_read;
+            std::cerr << "read " << val_read << " bytes: ";
+            for (int i = 0; i < std::min<ssize_t>(val_read, 8); ++i) {
+                std::cerr << std::hex << std::uppercase << (0xFF & buffer[i]) << " ";
+            }
+            std::cerr << std::dec << "\n";
+        }
+        if (bytes_read != prefix_bytes) {
+            perror("didn't read prefix");
             break;
         }
+        val_read = read(new_socket, buffer, BUFFER_SIZE - bytes_read);
         std::string msg(buffer, buffer + val_read);
         std::cout << "Received: " << msg << std::endl;
         if (msg == "exit") {
