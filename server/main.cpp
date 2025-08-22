@@ -30,12 +30,12 @@ int main() {
         perror("setsockopt SO_REUSEADDR");
         exit(EXIT_FAILURE);
     }
-    #ifdef SO_REUSEPORT
+#ifdef SO_REUSEPORT
     if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof(opt))) {
         perror("setsockopt SO_REUSEPORT");
         exit(EXIT_FAILURE);
     }
-    #endif
+#endif
     address.sin_family = AF_INET;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_port = htons(PORT);
@@ -66,8 +66,8 @@ int main() {
         constexpr int prefix_bytes = 4;
         int bytes_read = 0;
         ssize_t val_read = 0;
+        // ensures that entire prefix is read, if not then leaves trailing characters in front of json
         while (bytes_read < prefix_bytes) {
-            std::cout << "only " << bytes_read << " read" << std::endl;
             val_read = read(new_socket, len_buf + bytes_read, prefix_bytes - bytes_read);
             if (val_read <= 0) {
                 if (val_read < 0) {
@@ -76,24 +76,34 @@ int main() {
                 break;
             }
             bytes_read += val_read;
-            std::cerr << "read " << val_read << " bytes: ";
-            for (int i = 0; i < std::min<ssize_t>(val_read, 8); ++i) {
-                std::cerr << std::hex << std::uppercase << (0xFF & buffer[i]) << " ";
-            }
-            std::cerr << std::dec << "\n";
         }
         if (bytes_read != prefix_bytes) {
             perror("didn't read prefix");
             break;
         }
-        val_read = read(new_socket, buffer, BUFFER_SIZE - bytes_read);
-        std::string msg(buffer, buffer + val_read);
-        std::cout << "Received: " << msg << std::endl;
-        if (msg == "exit") {
-            std::cout << "Client exit, shutting down server";
-            break;
+
+        // ensures that the prefix says the same byte size as the payload
+        // ex: client sent 76 byte payload so prefix should be 00 00 00 4C
+        uint32_t net_len = 0;
+        std::memcpy(&net_len, len_buf, sizeof(net_len));
+        uint32_t len = ntohl(net_len);
+        if (len == 0 || len > 1'048'576) break;
+
+        // retrieve rest of bytes from client request, loop ensures doesn't use previous byte count1
+        std::string payload(len, '\0');
+        size_t got = 0;
+        while (got < len) {
+            ssize_t r = read(new_socket, payload.data() + got, len - got);
+            if (r == 0) break;
+            if (r < 0) {
+                if (errno == EINTR) continue;
+                break;
+            }
+            got += static_cast<size_t>(r);
         }
-        send(new_socket, buffer, BUFFER_SIZE, 0);
+        if (got != len) break;
+        std::cout << "Received: " << payload << std::endl;
+        send(new_socket, payload.data(), payload.size(), 0);
     }
 
     // close socket

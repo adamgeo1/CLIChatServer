@@ -46,7 +46,9 @@ json msg_to_json(const int req_id, const string& msg) {
         };
     }
     else if (cmd == "join") {
-        j["args"] = split_msg[1];
+        j["args"] = {
+            {"room", split_msg[1]}
+        };
     }
     else if (cmd == "msg") {
         ostringstream oss;
@@ -122,6 +124,7 @@ int main() {
         cout << "Enter message: ";
         getline(cin, msg);
         json req = msg_to_json(req_id, msg);
+        if (req["command"] == "exit") break;
         string payload = req.dump();
         uint32_t len = htonl(payload.size());
         string frame;
@@ -129,9 +132,6 @@ int main() {
         frame.append(payload);
         req_id++;
         send(sock, frame.data(), frame.size(), 0);
-        if (msg == "exit") {
-            break;
-        }
     }
 
     // close the socket
